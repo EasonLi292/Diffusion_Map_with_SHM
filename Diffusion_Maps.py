@@ -83,7 +83,7 @@ idx = eigenvalues.argsort()[::-1]
 eigenvalues = eigenvalues[idx]
 eigenvectors = eigenvectors[:, idx]
 
-# Step 5: Visualize the Embedding
+# Visualize the Embedding via first 2 non-trivial eigenvectors
 non_trivial_eigenvectors = eigenvectors[:, 1:3]
 
 plt.figure(figsize=(8, 6))
