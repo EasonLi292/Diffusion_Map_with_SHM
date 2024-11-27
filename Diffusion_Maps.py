@@ -24,9 +24,7 @@ images = images[:-1]  # Adjust images to match velocities
 
 # Normalize images and velocities separately
 images_scaled = StandardScaler().fit_transform(images) 
-velocities_scaled = StandardScaler().fit_transform(velocities)
-
-# Concatenate normalized images and velocities
+velocities_scaled = StandardScaler().fit_transform(velocities) * 1.5
 data_scaled = np.hstack((images_scaled, velocities_scaled))
 
 
@@ -34,14 +32,12 @@ data_scaled = np.hstack((images_scaled, velocities_scaled))
 distance_matrix = squareform(pdist(data_scaled))
 
 # Define the Gaussian Kernel
-def gauss_kernel(distance_matrix, sigma):
-    return np.exp(-distance_matrix**2 / (2 * sigma**2))
-
-# Tune sigma (start with the median distance)
-sigma = np.median(distance_matrix) 
+def gauss_kernel(distance_matrix, epsilon):
+    return np.exp(-distance_matrix**2 / (2 * epsilon**2))
+epsilon = np.median(distance_matrix) 
 
 # Compute the affinity matrix
-affinity_matrix = gauss_kernel(distance_matrix, sigma)
+affinity_matrix = gauss_kernel(distance_matrix, epsilon)
 
 # Row-normalize the affinity matrix
 row_sums = affinity_matrix.sum(axis=1)
