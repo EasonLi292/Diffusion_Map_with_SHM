@@ -3,69 +3,45 @@ import os
 from PIL import Image
 import matplotlib.pyplot as plt
 from scipy.spatial.distance import pdist, squareform
-from scipy.ndimage import center_of_mass
 from sklearn.preprocessing import StandardScaler
 
-# Load Images and Extract Vertical Positions
+# Load Images and Flatten
 image_dir = '/Users/eason/Desktop/Oscillator-MachineLearning/harmonic_motion_images'
-image_files = sorted([f for f in os.listdir(image_dir)])
+image_files = sorted([f for f in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, f))])
 
-positions = []
+images = []
+for file in image_files:
+    img = Image.open(os.path.join(image_dir, file))
+    img = img.convert('L')  # Convert to grayscale
+    img_array = np.array(img).flatten()
+    images.append(img_array)
 
-for i in range(len(image_files)):
-    # Load the image
-    img = Image.open(os.path.join(image_dir, image_files[i]))
-    #ensure only 2 dimensions
-    img_array = np.array(img).squeeze()
-    '''
-    optimization for potential noise factors in training
-    '''
-    # Threshold the image to create a binary image
-    #threshold = 128  # Adjust threshold as needed
-    #binary_img = img_array > threshold
-    
-    # Compute the center of mass
-    com = center_of_mass(img_array)
-    # output is (row, column)
-    # Use the vertical position in this case, could be optimized
-    positions.append(com[0])  
+images = np.array(images)
 
-positions = np.array(positions)
+# Compute Velocities (Differences Between Consecutive Images)
+velocities = (images[1:] - images[:-1])/0.25
+images = images[:-1]  # Adjust images to match velocities
 
-#Construct Data Points Using Time-Delay Embedding
-#could consider using more than 2 images for each data point
-data = []
+# Normalize images and velocities separately
+images_scaled = StandardScaler().fit_transform(images) 
+velocities_scaled = StandardScaler().fit_transform(velocities)
 
-for i in range(len(positions) - 1):
-    data_point = positions[i:i+2]
-    data.append(data_point)
+# Concatenate normalized images and velocities
+data_scaled = np.hstack((images_scaled, velocities_scaled))
 
-data = np.array(data)
-#print(f'Data shape: {data.shape}')
 
-# Compute Velocities to Match Data Length
-# Average velocity over the embedding window
-velocities = []
-for i in range(len(positions) - 1):
-    v = (positions[i + 1] - positions[i]) 
-    velocities.append(v)
-velocities = np.array(velocities)
+# Compute pairwise distances between data points
+distance_matrix = squareform(pdist(data_scaled))
 
-# Concatenate Data and Velocities
-data = np.column_stack((data, velocities))
+# Define the Gaussian Kernel
+def gauss_kernel(distance_matrix, sigma):
+    return np.exp(-distance_matrix**2 / (2 * sigma**2))
 
-# Normalize the Data
-#kinda important
-data_scaled = StandardScaler().fit_transform(data)
+# Tune sigma (start with the median distance)
+sigma = np.median(distance_matrix) 
 
-# Implement Diffusion Maps
-distance_matrix = squareform(pdist(data_scaled, metric='euclidean'))
-
-def gaussian_kernel(distance_matrix, epsilon):
-    return np.exp(-distance_matrix ** 2 / epsilon)
-
-epsilon = np.median(distance_matrix)
-affinity_matrix = gaussian_kernel(distance_matrix, epsilon)
+# Compute the affinity matrix
+affinity_matrix = gauss_kernel(distance_matrix, sigma)
 
 # Row-normalize the affinity matrix
 row_sums = affinity_matrix.sum(axis=1)
@@ -73,23 +49,19 @@ P = affinity_matrix / row_sums[:, np.newaxis]
 
 # Compute eigenvalues and eigenvectors
 eigenvalues, eigenvectors = np.linalg.eig(P)
-
-# Take the real parts
 eigenvalues = np.real(eigenvalues)
 eigenvectors = np.real(eigenvectors)
-
-# Sort eigenvalues and eigenvectors
 idx = eigenvalues.argsort()[::-1]
 eigenvalues = eigenvalues[idx]
 eigenvectors = eigenvectors[:, idx]
 
-# Visualize the Embedding via first 2 non-trivial eigenvectors
+# Visualize the Diffusion Map
 non_trivial_eigenvectors = eigenvectors[:, 1:3]
 
 plt.figure(figsize=(8, 6))
 plt.scatter(non_trivial_eigenvectors[:, 0], non_trivial_eigenvectors[:, 1],
             c=np.arange(len(non_trivial_eigenvectors)), cmap='viridis')
-plt.title('Diffusion Map Embedding')
+plt.title('Diffusion Map Embedding with Gaussian Kernel')
 plt.xlabel('First Non-Trivial Eigenvector')
 plt.ylabel('Second Non-Trivial Eigenvector')
 plt.colorbar(label='Data Point Index')
