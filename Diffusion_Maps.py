@@ -12,7 +12,6 @@ image_files = sorted([f for f in os.listdir(image_dir) if os.path.isfile(os.path
 images = []
 for file in image_files:
     img = Image.open(os.path.join(image_dir, file))
-    img = img.convert('L')  # Convert to grayscale
     img_array = np.array(img).flatten()
     images.append(img_array)
 
