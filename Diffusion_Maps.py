@@ -6,7 +6,7 @@ from scipy.spatial.distance import pdist, squareform
 from sklearn.preprocessing import StandardScaler
 
 # Load Images and Flatten
-image_dir = '/Users/eason/Desktop/Oscillator-MachineLearning/harmonic_motion_images'
+image_dir = '/Users/eason/Desktop/Oscillator-MachineLearning/harmonic_motion_images_new'
 image_files = sorted([f for f in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, f))])
 
 images = []
@@ -18,12 +18,12 @@ for file in image_files:
 images = np.array(images)
 
 # Compute Velocities (Differences Between Consecutive Images)
-velocities = (images[1:] - images[:-1])/0.25
+velocities = (images[1:] - images[:-1])
 images = images[:-1]  # Adjust images to match velocities
 
 # Normalize images and velocities separately
 images_scaled = StandardScaler().fit_transform(images) 
-velocities_scaled = StandardScaler().fit_transform(velocities) * 1.5
+velocities_scaled = StandardScaler().fit_transform(velocities) * 1.4
 data_scaled = np.hstack((images_scaled, velocities_scaled))
 
 
@@ -37,10 +37,17 @@ epsilon = np.median(distance_matrix)
 
 # Compute the affinity matrix
 affinity_matrix = gauss_kernel(distance_matrix, epsilon)
+q = affinity_matrix.sum(axis=1)
 
+# Symmetric normalization: K(i,j) = W(i,j) / sqrt(q(i)*q(j))
+K = affinity_matrix / np.sqrt(np.outer(q, q))
+
+# Row-normalize K to get Markov matrix P
+row_sums_K = K.sum(axis=1)
 # Row-normalize the affinity matrix
 row_sums = affinity_matrix.sum(axis=1)
-P = affinity_matrix / row_sums[:, np.newaxis]
+P = K / row_sums_K[:, np.newaxis]
+P = np.linalg.matrix_power(P, 5)
 
 # Compute eigenvalues and eigenvectors
 eigenvalues, eigenvectors = np.linalg.eig(P)

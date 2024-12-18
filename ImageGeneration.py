@@ -5,8 +5,8 @@ from PIL import Image, ImageDraw
 # Parameters
 mass = 1.0          # Mass (kg)
 k = 1.0             # Spring constant (N/m)
-dt = 1/4           # Time step (s)
-num_steps = 100     # Number of frames
+dt = 1/24           # Time step (s)
+num_steps = 300     # Number of frames
 
 # Initial conditions
 x = np.zeros(num_steps)
@@ -29,7 +29,7 @@ for i in range(num_steps - 1):
     a[i + 1] = a_new
 
 # Create directory to save images
-image_dir = 'harmonic_motion_images'
+image_dir = 'harmonic_motion_images_24fps'
 if not os.path.exists(image_dir):
     os.makedirs(image_dir)
 
