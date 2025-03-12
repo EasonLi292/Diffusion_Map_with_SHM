@@ -5,8 +5,8 @@ from PIL import Image, ImageDraw
 # Parameters
 mass = 1.0          # Mass (kg)
 k = 1.0             # Spring constant (N/m)
-dt = 1/24           # Time step (s)
-num_steps = 300     # Number of frames
+dt = 1/8           # Time step (s)
+num_steps = 100     # Number of frames
 
 # Initial conditions
 x = np.zeros(num_steps)
