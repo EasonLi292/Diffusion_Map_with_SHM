@@ -252,3 +252,82 @@ def validate_accuracy(vae, dynamics, image_dir=None, loader=None, device=None):
 # image_dir = '/Users/eason/Desktop/Oscillator-MachineLearning/harmonic_motion_images_new'
 # vae_model, dyn_model = train_system(image_dir, epochs=100)
 # validate_accuracy(vae_model, dyn_model, image_dir)
+
+import matplotlib.pyplot as plt
+
+def visualize_phase_space(vae, dynamics, loader, device=None):
+    if device is None:
+        device = next(vae.parameters()).device
+        
+    vae.eval()
+    dynamics.eval()
+    
+    # Store latent coordinates
+    z_history = []
+    
+    print("Extracting latent dynamics...")
+    with torch.no_grad():
+        for current_frame, _ in loader:
+            current_frame = current_frame.to(device)
+            
+            # Get the latent mean (mu) - this is the "cleanest" coordinate
+            # We skip 'z' (which has random noise) to see the pure trajectory
+            _, mu, _, _ = vae(current_frame)
+            
+            # Store as numpy points
+            z_history.append(mu.cpu().numpy())
+            
+    # Concatenate all batches
+    z_points = np.concatenate(z_history, axis=0)
+    
+    # --- PLOTTING ---
+    plt.figure(figsize=(12, 5))
+    
+    # 1. The Trajectory Plot (What the VAE "sees")
+    plt.subplot(1, 2, 1)
+    # We use 'c' (color) to show time progression if the data is sequential
+    # If data is shuffled, this just shows density
+    plt.scatter(z_points[:, 0], z_points[:, 1], c=range(len(z_points)), cmap='viridis', s=5, alpha=0.7)
+    plt.colorbar(label='Time / Frame Index')
+    plt.title("Learned Latent Phase Space (z1 vs z2)")
+    plt.xlabel("Latent Dimension 1")
+    plt.ylabel("Latent Dimension 2")
+    plt.grid(True, alpha=0.3)
+
+    # 2. The Vector Field (What the Dynamics Network "predicts")
+    # This shows the "flow" of physics the model learned
+    plt.subplot(1, 2, 2)
+    
+    # Create a grid of points covering the range of our data
+    x_min, x_max = z_points[:, 0].min(), z_points[:, 0].max()
+    y_min, y_max = z_points[:, 1].min(), z_points[:, 1].max()
+    
+    grid_x, grid_y = np.meshgrid(
+        np.linspace(x_min, x_max, 20),
+        np.linspace(y_min, y_max, 20)
+    )
+    
+    # Convert grid to tensor for the model
+    grid_tensor = torch.tensor(np.column_stack((grid_x.ravel(), grid_y.ravel())), dtype=torch.float32).to(device)
+    
+    with torch.no_grad():
+        # Predict where these points move next
+        pred_next = dynamics(grid_tensor)
+        
+    # Calculate velocity vectors (Next - Current)
+    flow = (pred_next - grid_tensor).cpu().numpy()
+    u = flow[:, 0].reshape(grid_x.shape)
+    v = flow[:, 1].reshape(grid_y.shape)
+    
+    plt.streamplot(grid_x, grid_y, u, v, color='orange', density=1.5)
+    plt.scatter(z_points[:, 0], z_points[:, 1], s=1, color='blue', alpha=0.1) # Overlay real data faintly
+    plt.title("Predicted Vector Field (The 'Physics' Engine)")
+    plt.xlabel("Latent Dim 1")
+    plt.ylabel("Latent Dim 2")
+    
+    plt.tight_layout()
+    plt.show()
+
+# Run it
+# visualize_phase_space(vae_model, dyn_model, val_loader)
+# Note: Ensure val_loader is not shuffled (shuffle=False) if you want the color gradient to represent time correctly!
