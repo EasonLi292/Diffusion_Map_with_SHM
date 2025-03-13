@@ -45,13 +45,34 @@ class VAE(nn.Module):
             nn.ReLU(),
             nn.Flatten()
         )
-        
+
+        # Intermediate dense layers for gradual compression
+        # 18432 -> 512 -> 128 -> 32 -> latent_dim
+        self.fc_intermediate = nn.Sequential(
+            nn.Linear(128 * 12 * 12, 512),
+            nn.ReLU(),
+            nn.Linear(512, 128),
+            nn.ReLU(),
+            nn.Linear(128, 32),
+            nn.ReLU()
+        )
+
         # Latent Space (Mean and LogVar)
-        self.fc_mu = nn.Linear(128 * 12 * 12, latent_dim)
-        self.fc_logvar = nn.Linear(128 * 12 * 12, latent_dim)
-        
+        self.fc_mu = nn.Linear(32, latent_dim)
+        self.fc_logvar = nn.Linear(32, latent_dim)
+
         # Decoder: Latent -> 100x100
-        self.decoder_input = nn.Linear(latent_dim, 128 * 12 * 12)
+        # Gradual expansion: latent_dim -> 32 -> 128 -> 512 -> 18432
+        self.decoder_input = nn.Sequential(
+            nn.Linear(latent_dim, 32),
+            nn.ReLU(),
+            nn.Linear(32, 128),
+            nn.ReLU(),
+            nn.Linear(128, 512),
+            nn.ReLU(),
+            nn.Linear(512, 128 * 12 * 12),
+            nn.ReLU()
+        )
         
         self.decoder = nn.Sequential(
             nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1), # 24x24
@@ -69,10 +90,11 @@ class VAE(nn.Module):
 
     def forward(self, x):
         h = self.encoder(x)
+        h = self.fc_intermediate(h)
         mu = self.fc_mu(h)
         logvar = self.fc_logvar(h)
         z = self.reparameterize(mu, logvar)
-        
+
         d = self.decoder_input(z)
         d = d.view(-1, 128, 12, 12)
         recon = self.decoder(d)
