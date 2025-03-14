@@ -37,23 +37,23 @@ class VAE(nn.Module):
         
         # Encoder: 100x100 -> Latent
         self.encoder = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=4, stride=2, padding=1), # 50x50
+            nn.Conv2d(1, 8, kernel_size=4, stride=2, padding=1), # 50x50
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1), # 25x25
+            nn.Conv2d(8, 16, kernel_size=4, stride=2, padding=1), # 25x25
             nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1), # 12x12
+            nn.Conv2d(16, 32, kernel_size=4, stride=2, padding=1), # 12x12
             nn.ReLU(),
             nn.Flatten()
         )
 
         # Intermediate dense layers for gradual compression
-        # 18432 -> 512 -> 128 -> 32 -> latent_dim
+        # 4608 -> 128 -> 64 -> 32 -> latent_dim
         self.fc_intermediate = nn.Sequential(
-            nn.Linear(128 * 12 * 12, 512),
+            nn.Linear(32 * 12 * 12, 128),
             nn.ReLU(),
-            nn.Linear(512, 128),
+            nn.Linear(128, 64),
             nn.ReLU(),
-            nn.Linear(128, 32),
+            nn.Linear(64, 32),
             nn.ReLU()
         )
 
@@ -62,24 +62,24 @@ class VAE(nn.Module):
         self.fc_logvar = nn.Linear(32, latent_dim)
 
         # Decoder: Latent -> 100x100
-        # Gradual expansion: latent_dim -> 32 -> 128 -> 512 -> 18432
+        # Gradual expansion: latent_dim -> 32 -> 64 -> 4608
         self.decoder_input = nn.Sequential(
             nn.Linear(latent_dim, 32),
             nn.ReLU(),
-            nn.Linear(32, 128),
+            nn.Linear(32, 64),
             nn.ReLU(),
-            nn.Linear(128, 512),
+            nn.Linear(64, 128),
             nn.ReLU(),
-            nn.Linear(512, 128 * 12 * 12),
+            nn.Linear(128, 32 * 12 * 12),
             nn.ReLU()
         )
         
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1), # 24x24
+            nn.ConvTranspose2d(32, 16, kernel_size=4, stride=2, padding=1), # 24x24
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=0),  # 50x50 (padding=0 adjusts size)
+            nn.ConvTranspose2d(16, 8, kernel_size=4, stride=2, padding=0),  # 50x50 (padding=0 adjusts size)
             nn.ReLU(),
-            nn.ConvTranspose2d(32, 1, kernel_size=4, stride=2, padding=1),   # 100x100
+            nn.ConvTranspose2d(8, 1, kernel_size=4, stride=2, padding=1),   # 100x100
             nn.Sigmoid() # Output pixels 0-1
         )
 
@@ -96,7 +96,7 @@ class VAE(nn.Module):
         z = self.reparameterize(mu, logvar)
 
         d = self.decoder_input(z)
-        d = d.view(-1, 128, 12, 12)
+        d = d.view(-1, 32, 12, 12)
         recon = self.decoder(d)
         return recon, mu, logvar, z
 
@@ -107,6 +107,8 @@ class LatentDynamics(nn.Module):
         super(LatentDynamics, self).__init__()
         self.net = nn.Sequential(
             nn.Linear(latent_dim, 16),
+            nn.ReLU(),
+            nn.Linear(16, 16),
             nn.ReLU(),
             nn.Linear(16, latent_dim)
         )
@@ -183,7 +185,7 @@ def train_system(image_dir, epochs=50, batch_size=32, val_split=0.2, device=None
             
             # 3. Decode Predicted Future (Predict next frame from predicted latent)
             d_pred = vae.decoder_input(z_t1_pred)
-            d_pred = d_pred.view(-1, 128, 12, 12)
+            d_pred = d_pred.view(-1, 32, 12, 12)
             pred_next_frame = vae.decoder(d_pred)
             
             # Loss: Reconstruction + KL + Prediction Accuracy
@@ -211,7 +213,7 @@ def train_system(image_dir, epochs=50, batch_size=32, val_split=0.2, device=None
                     recon_x, mu, logvar, z_t = vae(cur)
                     z_t1_pred = dynamics(z_t)
                     d_pred = vae.decoder_input(z_t1_pred)
-                    d_pred = d_pred.view(-1, 128, 12, 12)
+                    d_pred = d_pred.view(-1, 32, 12, 12)
                     pred_next_frame = vae.decoder(d_pred)
                     recon_l = nn.functional.mse_loss(recon_x, cur, reduction='mean')
                     pred_l = nn.functional.mse_loss(pred_next_frame, nxt, reduction='mean')
@@ -261,7 +263,7 @@ def validate_accuracy(vae, dynamics, image_dir=None, loader=None, device=None):
             
             # Decode Predicted Future
             d_pred = vae.decoder_input(z_t1_pred)
-            d_pred = d_pred.view(-1, 128, 12, 12)
+            d_pred = d_pred.view(-1, 32, 12, 12)
             predicted_frame = vae.decoder(d_pred)
             
             # Calculate SSIM per-sample to avoid win_size errors on small batches
